@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>大學聯絡簿 Planner</title>
+  <style>
+    :root {
+      --primary-color: #5c6b73;
+      --bg-color: #f7f9fb;
+      --card-bg: #ffffff;
+      --border-color: #e0e4e8;
+      --text-main: #2b2d42;
+      --accent: #8d99ae;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body { background-color: var(--bg-color); color: var(--text-main); padding: 20px; }
+
+    /* 頂部導航與週數控制 */
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      padding: 16px 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+      gap: 12px;
+    }
+    .week-tracker { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.05rem; flex-wrap: wrap; }
+    .week-btn {
+      background: #edf2f4; border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 4px 10px; cursor: pointer; font-weight: bold;
+    }
+    .week-btn:hover { background: #e2e8f0; }
+    .week-date-range { font-size: 0.9rem; color: #64748b; font-weight: normal; margin-left: 4px; }
+
+    .week-jump-select {
+      margin-left: 6px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-color);
+      background: #edf2f4; font-weight: 600; cursor: pointer; font-size: 0.85rem; color: var(--text-main);
+      max-width: 220px;
+    }
+    .week-jump-select:hover { background: #e2e8f0; }
+
+    .nav-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tab-btn {
+      background: transparent; border: none; padding: 10px 18px; border-radius: 8px;
+      cursor: pointer; font-size: 0.95rem; font-weight: 600; color: var(--accent);
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active { background: var(--primary-color); color: #fff; }
+
+    .tab-content { display: none; background: var(--card-bg); border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .tab-content.active { display: block; }
+
+    /* 工具列（新增課程 / 新增排班 共用樣式） */
+    .timetable-toolbar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+    .add-course-btn {
+      background: var(--primary-color); color: #fff; border: none; border-radius: 8px;
+      padding: 9px 18px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    }
+    .add-course-btn:hover { background: #48545b; }
+
+    /* 課表樣式 */
+    .table-container { overflow-x: auto; }
+    table.timetable { width: 100%; border-collapse: collapse; min-width: 850px; text-align: center; }
+    table.timetable th, table.timetable td { border: 1px solid var(--border-color); padding: 6px; vertical-align: middle; }
+    table.timetable th { background: #f8fafc; font-weight: 600; padding: 8px; }
+
+    .period-cell { width: 175px; min-width: 175px; background: #fafafa; padding: 8px !important; }
+    .period-name { font-weight: 700; font-size: 1.05rem; margin-bottom: 6px; }
+
+    /* 24小時制時間選擇器樣式 */
+    .time-picker-container { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .time-row { display: flex; align-items: center; gap: 3px; }
+    .time-select {
+      width: 54px; border: 1px solid #cbd5e1; border-radius: 4px;
+      background: #fff; text-align: center; font-size: 0.8rem; color: #475569;
+      padding: 3px 2px; outline: none; cursor: pointer;
+    }
+    .time-select:focus { border-color: var(--primary-color); }
+    .time-sep { font-size: 0.78rem; color: #94a3b8; }
+
+    /* 課程儲存格（名稱 / 教室 / 顏色） */
+    .course-name-input {
+      width: 100%; border: none; outline: none; background: transparent;
+      font-size: 0.85rem; text-align: center; font-weight: 600; padding: 2px 0; color: var(--text-main);
+    }
+    .course-name-input::placeholder { color: #b7c0ca; font-weight: normal; }
+    .course-name-input:focus { background: rgba(255,255,255,0.65); border-radius: 4px; }
+
+    .course-room-input {
+      width: 100%; border: none; outline: none; background: transparent;
+      font-size: 0.72rem; text-align: center; color: #64748b; padding: 1px 0;
+    }
+    .course-room-input:focus { background: rgba(255,255,255,0.65); border-radius: 4px; }
+
+    .course-color-input {
+      position: absolute; top: 3px; right: 3px; width: 16px; height: 16px;
+      border: none; padding: 0; cursor: pointer; background: transparent;
+    }
+
+    /* 新增課程／新增排班 Modal 共用 */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center;
+      z-index: 1000; padding: 20px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 420px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto;
+    }
+    .modal-box h3 { margin-bottom: 18px; font-size: 1.1rem; color: var(--text-main); }
+    .modal-field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+    .modal-field label { font-size: 0.85rem; font-weight: 600; color: #64748b; }
+    .modal-field select, .modal-field input[type="text"], .modal-field input[type="date"] {
+      padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; outline: none;
+    }
+    .modal-field select:focus, .modal-field input[type="text"]:focus, .modal-field input[type="date"]:focus { border-color: var(--primary-color); }
+    .modal-field input[type="color"] { width: 60px; height: 36px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; padding: 2px; }
+    .modal-row { display: flex; gap: 12px; }
+    .modal-row .modal-field { flex: 1; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+    .modal-btn { border: none; border-radius: 6px; padding: 8px 16px; font-size: 0.9rem; cursor: pointer; font-weight: 600; }
+    .modal-btn.cancel { background: #edf2f4; color: var(--text-main); }
+    .modal-btn.cancel:hover { background: #e2e8f0; }
+    .modal-btn.confirm { background: var(--primary-color); color: #fff; }
+    .modal-btn.confirm:hover { background: #48545b; }
+
+    .weekday-checkbox-group { display: flex; gap: 10px; flex-wrap: wrap; }
+    .weekday-checkbox-group label { display: flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer; }
+    .modal-time-row { display: flex; align-items: center; gap: 4px; }
+    .modal-time-row select {
+      padding: 6px 4px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.85rem; background: #fff; cursor: pointer;
+    }
+
+    /* 週行事曆：左右分割 */
+    .weekly-split { display: flex; gap: 20px; align-items: flex-start; }
+    .weekly-left { flex: 1 1 62%; min-width: 0; }
+    .weekly-right {
+      flex: 1 1 34%; min-width: 260px; background: #fbfcfd; border: 1px solid var(--border-color);
+      border-radius: 10px; padding: 16px; max-height: 80vh; overflow-y: auto;
+    }
+    .reminder-panel-title { font-size: 1rem; margin-bottom: 12px; color: var(--text-main); }
+    .reminder-list { display: flex; flex-direction: column; gap: 10px; }
+    .reminder-empty { color: #94a3b8; font-size: 0.85rem; text-align: center; padding: 24px 0; }
+    .reminder-item { border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; background: #fff; }
+    .reminder-item-date { font-size: 0.75rem; color: #64748b; font-weight: 600; margin-bottom: 4px; }
+    .reminder-item-badge {
+      display: inline-block; font-size: 0.7rem; background: #fef3c7; color: #92400e;
+      border-radius: 10px; padding: 1px 8px; margin-left: 6px;
+    }
+    .reminder-item-title { font-size: 0.85rem; font-weight: 600; color: var(--primary-color); margin-bottom: 2px; }
+    .reminder-item-text { font-size: 0.85rem; color: var(--text-main); word-break: break-word; }
+
+    @media (max-width: 900px) {
+      .weekly-split { flex-direction: column; }
+      .weekly-right { max-height: none; width: 100%; }
+    }
+
+    /* 週行事曆卡片 */
+    .weekly-layout { display: flex; flex-direction: column; gap: 16px; }
+    .day-card {
+      border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;
+      display: flex; min-height: 120px; background: #fff;
+    }
+    .day-label {
+      width: 130px; background: #fdfefe; border-right: 1px solid var(--border-color);
+      display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 12px;
+      font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0;
+    }
+    .day-label .date-subtext { font-size: 0.8rem; font-weight: normal; color: #8d99ae; margin-top: 4px; }
+
+    .day-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    .courses-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 0 16px; }
+    .course-pill {
+      background: #edf2f4; border: 1px solid var(--border-color); border-radius: 14px;
+      padding: 4px 12px; font-size: 0.8rem; cursor: pointer; color: var(--text-main);
+      transition: filter 0.2s ease;
+    }
+    .course-pill:hover { filter: brightness(0.94); }
+
+    .records-container { display: flex; flex-direction: column; gap: 6px; padding: 8px 16px 0 16px; }
+    .record-row {
+      display: flex; align-items: center; gap: 8px; background: #f8fafc;
+      border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; flex-wrap: wrap;
+    }
+    .record-course { font-weight: 600; font-size: 0.82rem; white-space: nowrap; color: var(--primary-color); }
+    .record-input { flex: 1; min-width: 120px; border: none; outline: none; background: transparent; font-size: 0.85rem; }
+    .record-remind-select {
+      flex-shrink: 0; font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px;
+      padding: 4px 6px; background: #fff; color: #475569; cursor: pointer;
+    }
+    .record-remove { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 0.9rem; padding: 0 4px; flex-shrink: 0; }
+    .record-remove:hover { color: #e5484d; }
+
+    .day-notes {
+      flex: 1; border: none; outline: none; resize: vertical; padding: 12px 16px;
+      font-size: 0.95rem; line-height: 1.6; min-height: 60px;
+      background: repeating-linear-gradient(to bottom, transparent, transparent 27px, var(--border-color) 28px);
+    }
+
+    /* 月曆樣式 */
+    .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .calendar-grid-wrapper { overflow-x: auto; }
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; min-width: 980px; }
+    .calendar-cell {
+      border: 1px solid var(--border-color); min-height: 130px; border-radius: 6px;
+      padding: 6px; font-size: 0.85rem; background: #fafbfc; position: relative;
+      display: flex; flex-direction: column;
+    }
+    .calendar-cell.header { background: #e2e8f0; font-weight: bold; text-align: center; min-height: auto; padding: 8px; }
+    .calendar-cell.empty { background: transparent; border-color: transparent; }
+    .day-num { font-weight: bold; margin-bottom: 4px; }
+
+    .cal-shift-list { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 3px; }
+    .cal-shift-badge {
+      display: inline-block; background: #edf2f4; border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 2px 6px; font-size: 0.62rem; color: var(--text-main);
+    }
+
+    .cal-todo-list { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; flex: 1; }
+    .cal-todo-item { display: flex; align-items: center; gap: 3px; }
+    .cal-todo-item.done .cal-todo-text { text-decoration: line-through; color: #a0aab5; }
+    .cal-todo-item input[type="checkbox"] { flex-shrink: 0; cursor: pointer; }
+    .cal-todo-text {
+      flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+      font-size: 0.72rem; padding: 1px 2px; color: var(--text-main);
+    }
+    .cal-todo-text:focus { background: #f0f4f8; border-radius: 3px; }
+    .cal-todo-remind {
+      flex-shrink: 0; font-size: 0.6rem; border: 1px solid var(--border-color); border-radius: 3px;
+      background: #fff; padding: 1px; max-width: 54px;
+    }
+    .cal-todo-remove { flex-shrink: 0; background: none; border: none; color: #c2c9d1; cursor: pointer; font-size: 0.75rem; padding: 0 2px; }
+    .cal-todo-remove:hover { color: #e5484d; }
+
+    .cal-add-row { display: flex; gap: 3px; margin-top: 5px; }
+    .cal-add-input {
+      flex: 1; min-width: 0; border: 1px solid var(--border-color); border-radius: 3px;
+      font-size: 0.7rem; padding: 2px 4px; outline: none;
+    }
+    .cal-add-input:focus { border-color: var(--primary-color); }
+    .cal-add-remind { flex-shrink: 0; font-size: 0.6rem; border: 1px solid var(--border-color); border-radius: 3px; max-width: 52px; }
+    .cal-add-btn {
+      flex-shrink: 0; background: var(--primary-color); color: #fff; border: none; border-radius: 3px;
+      width: 20px; font-size: 0.75rem; cursor: pointer;
+    }
+    .cal-add-btn:hover { background: #48545b; }
+
+    /* 班表分頁：排班規則列表 */
+    .shift-list { display: flex; flex-direction: column; gap: 14px; }
+    .shift-list-empty { color: #94a3b8; font-size: 0.9rem; text-align: center; padding: 40px 0; }
+
+    .shift-entry-card {
+      border: 1px solid var(--border-color); border-radius: 10px; padding: 14px 16px; background: #fff;
+      border-left-width: 5px; border-left-style: solid;
+    }
+    .shift-entry-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .shift-weekday-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .shift-weekday-check { display: flex; align-items: center; gap: 3px; font-size: 0.82rem; color: var(--text-main); cursor: pointer; }
+    .shift-weekday-check input { cursor: pointer; }
+    .shift-entry-top-actions { display: flex; align-items: center; gap: 10px; }
+    .shift-entry-color { width: 26px; height: 26px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; padding: 1px; }
+    .shift-entry-remove {
+      background: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 10px;
+      font-size: 0.8rem; color: #94a3b8; cursor: pointer;
+    }
+    .shift-entry-remove:hover { color: #e5484d; border-color: #e5484d; }
+
+    .shift-entry-body { display: flex; flex-wrap: wrap; gap: 16px; }
+    .shift-entry-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: #64748b; }
+    .shift-entry-field input[type="date"], .shift-entry-field input[type="text"] {
+      padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.85rem; outline: none; color: var(--text-main);
+    }
+    .shift-entry-field input:focus { border-color: var(--primary-color); }
+    .shift-entry-field-wide { flex: 1 1 220px; }
+    .shift-entry-field .time-row select {
+      border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; font-size: 0.8rem; background: #fff; cursor: pointer;
+    }
+
+    /* 班表分頁：本月薪資試算 */
+    .salary-card { border: 1px solid var(--border-color); border-radius: 10px; padding: 18px 20px; margin-bottom: 20px; background: #fbfcfd; }
+    .salary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+    .salary-header h3 { font-size: 1rem; color: var(--text-main); }
+    .salary-month-nav { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    .salary-jobs-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+    .salary-job-row {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: #fff;
+      border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px;
+    }
+    .salary-job-name { font-weight: 600; font-size: 0.9rem; color: var(--primary-color); flex: 1 1 140px; }
+    .salary-job-hours { font-size: 0.85rem; color: #64748b; flex: 0 0 auto; }
+    .salary-job-wage { display: flex; align-items: center; gap: 4px; font-size: 0.85rem; color: #64748b; }
+    .salary-wage-input {
+      width: 80px; border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 6px; font-size: 0.85rem; outline: none;
+    }
+    .salary-wage-input:focus { border-color: var(--primary-color); }
+    .salary-job-subtotal { font-weight: 700; font-size: 0.9rem; color: var(--text-main); margin-left: auto; }
+    .salary-empty { color: #94a3b8; font-size: 0.85rem; text-align: center; padding: 16px 0; }
+    .salary-total { text-align: right; font-size: 1.05rem; font-weight: 700; color: var(--text-main); padding-top: 10px; border-top: 1px dashed var(--border-color); }
+    .salary-total-amount { color: #1f8a5f; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="week-tracker">
+      <button class="week-btn" onclick="changeWeek(-1)">◀</button>
+      <span id="currentWeekDisplay">第 1 週</span>
+      <button class="week-btn" onclick="changeWeek(1)">▶</button>
+      <select id="weekJumpSelect" class="week-jump-select" onchange="jumpToWeek(this.value)"></select>
+    </div>
+    <nav class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('timetable')">課表</button>
+      <button class="tab-btn" onclick="switchTab('weekly')">週行事曆</button>
+      <button class="tab-btn" onclick="switchTab('calendar')">月曆</button>
+      <button class="tab-btn" onclick="switchTab('shift')">班表</button>
+    </nav>
+  </header>
+
+  <!-- 課表分頁 -->
+  <section id="timetable" class="tab-content active">
+    <div class="timetable-toolbar">
+      <button type="button" class="add-course-btn" onclick="openAddCourseModal()">+ 新增課程</button>
+    </div>
+    <div class="table-container">
+      <table class="timetable">
+        <thead>
+          <tr>
+            <th>節次 / 時間</th>
+            <th>週一</th>
+            <th>週二</th>
+            <th>週三</th>
+            <th>週四</th>
+            <th>週五</th>
+            <th>週六</th>
+            <th>週日</th>
+          </tr>
+        </thead>
+        <tbody id="timetableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 週行事曆分頁（左右分割） -->
+  <section id="weekly" class="tab-content">
+    <div class="weekly-split">
+      <div class="weekly-left">
+        <div class="weekly-layout" id="weeklyContainer"></div>
+      </div>
+      <div class="weekly-right">
+        <h3 class="reminder-panel-title">🔔 即將到來的提醒</h3>
+        <div class="reminder-list" id="reminderList"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 月曆分頁 -->
+  <section id="calendar" class="tab-content">
+    <div class="calendar-header">
+      <button class="week-btn" onclick="changeMonth(-1)">◀ 上個月</button>
+      <h3 id="monthYearDisplay"></h3>
+      <button class="week-btn" onclick="changeMonth(1)">下個月 ▶</button>
+    </div>
+    <div class="calendar-grid-wrapper">
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+  </section>
+
+  <!-- 班表分頁（排班規則列表 + 薪資試算） -->
+  <section id="shift" class="tab-content">
+    <div class="timetable-toolbar">
+      <button type="button" class="add-course-btn" onclick="openAddShiftModal()">+ 新增排班</button>
+    </div>
+
+    <div class="salary-card">
+      <div class="salary-header">
+        <h3>💰 本月薪資試算</h3>
+        <div class="salary-month-nav">
+          <button class="week-btn" onclick="changeSalaryMonth(-1)">◀</button>
+          <span id="salaryMonthLabel"></span>
+          <button class="week-btn" onclick="changeSalaryMonth(1)">▶</button>
+        </div>
+      </div>
+      <div id="salaryJobsList" class="salary-jobs-list"></div>
+      <div class="salary-total" id="salaryTotal"></div>
+    </div>
+
+    <div class="shift-list" id="shiftListContainer"></div>
+  </section>
+
+  <!-- 新增課程 Modal -->
+  <div id="addCourseModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>新增課程</h3>
+
+      <div class="modal-field">
+        <label>星期</label>
+        <select id="addCourseDay">
+          <option value="1">週一</option>
+          <option value="2">週二</option>
+          <option value="3">週三</option>
+          <option value="4">週四</option>
+          <option value="5">週五</option>
+          <option value="6">週六</option>
+          <option value="7">週日</option>
+        </select>
+      </div>
+
+      <div class="modal-row">
+        <div class="modal-field">
+          <label>從第幾堂</label>
+          <select id="addCourseStartPeriod"></select>
+        </div>
+        <div class="modal-field">
+          <label>到第幾堂</label>
+          <select id="addCourseEndPeriod"></select>
+        </div>
+      </div>
+
+      <div class="modal-field">
+        <label>課程名稱</label>
+        <input type="text" id="addCourseName" placeholder="例如：運輸學">
+      </div>
+
+      <div class="modal-field">
+        <label>教室位置</label>
+        <input type="text" id="addCourseRoom" placeholder="例如：管理學院 302">
+      </div>
+
+      <div class="modal-field">
+        <label>顏色</label>
+        <input type="color" id="addCourseColor" value="#cfe8ff">
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="modal-btn cancel" onclick="closeAddCourseModal()">取消</button>
+        <button type="button" class="modal-btn confirm" onclick="submitAddCourse()">加入課表</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增排班 Modal -->
+  <div id="addShiftModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>新增排班</h3>
+
+      <div class="modal-row">
+        <div class="modal-field">
+          <label>開始日期</label>
+          <input type="date" id="addShiftStartDate">
+        </div>
+        <div class="modal-field">
+          <label>結束日期（選填）</label>
+          <input type="date" id="addShiftEndDate">
+        </div>
+      </div>
+
+      <div class="modal-field">
+        <label>星期幾要上（可複選）</label>
+        <div class="weekday-checkbox-group" id="addShiftWeekdayGroup">
+          <label><input type="checkbox" value="1"> 一</label>
+          <label><input type="checkbox" value="2"> 二</label>
+          <label><input type="checkbox" value="3"> 三</label>
+          <label><input type="checkbox" value="4"> 四</label>
+          <label><input type="checkbox" value="5"> 五</label>
+          <label><input type="checkbox" value="6"> 六</label>
+          <label><input type="checkbox" value="7"> 日</label>
+        </div>
+      </div>
+
+      <div class="modal-field">
+        <label>排班時間</label>
+        <div class="modal-time-row">
+          <select id="addShiftStartHour"></select>
+          <span class="time-sep">:</span>
+          <select id="addShiftStartMinute"></select>
+          <span class="time-sep">～</span>
+          <select id="addShiftEndHour"></select>
+          <span class="time-sep">:</span>
+          <select id="addShiftEndMinute"></select>
+        </div>
+      </div>
+
+      <div class="modal-field">
+        <label>地點</label>
+        <input type="text" id="addShiftLocation" placeholder="例如：星巴克 忠孝店">
+      </div>
+
+      <div class="modal-field">
+        <label>備註</label>
+        <input type="text" id="addShiftNote" placeholder="例如：代班、需自備制服">
+      </div>
+
+      <div class="modal-field">
+        <label>顏色</label>
+        <input type="color" id="addShiftColor" value="#cfe8ff">
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="modal-btn cancel" onclick="closeAddShiftModal()">取消</button>
+        <button type="button" class="modal-btn confirm" onclick="submitAddShift()">加入班表</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 預設 9/7 開學日
+    const currentYear = new Date().getFullYear();
+    const SEMESTER_START = new Date(currentYear, 8, 7); // 8 代表 9 月
+
+    // 計算當前為第幾週
+    function calculateInitialWeek() {
+      const today = new Date();
+      const diffTime = today - SEMESTER_START;
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      const week = Math.floor(diffDays / 7) + 1;
+      return week > 0 ? week : 1;
+    }
+
+    let activeWeek = calculateInitialWeek();
+    let currentCalDate = new Date();
+    let salaryCalDate = new Date();
+    let maxJumpWeeks = 25;
+
+    const periods = ['1', '2', '3', '4', 'N', '5', '6', '7', '8', '9', 'A', 'B', 'C'];
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const WEEKDAY_LABELS_ZH = ['日', '一', '二', '三', '四', '五', '六']; // 對應 JS getDay()：0=日...6=六
+    const OUR_WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日']; // 對應本專案 1=週一...7=週日
+
+    const REMIND_OPTIONS_HTML = `
+      <option value="">不提醒</option>
+      <option value="0">當天</option>
+      <option value="1">1天前</option>
+      <option value="2">2天前</option>
+      <option value="3">3天前</option>
+      <option value="7">1週前</option>
+    `;
+
+    // 共用：HTML 跳脫，避免使用者輸入內容破壞畫面
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function pad2(n) { return n.toString().padStart(2, '0'); }
+
+    function getDateForWeekDay(week, day) {
+      const d = new Date(SEMESTER_START);
+      d.setDate(SEMESTER_START.getDate() + (week - 1) * 7 + (day - 1));
+      return d;
+    }
+
+    function formatDateShort(d) {
+      return `${d.getMonth() + 1}/${d.getDate()}`;
+    }
+
+    function formatISODate(d) {
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    }
+
+    // JS 的 getDay()：0=週日...6=週六，轉換成本專案 1=週一...7=週日
+    function jsDayToOurDay(jsDay) {
+      return jsDay === 0 ? 7 : jsDay;
+    }
+
+    function buildRemindSelectHtml(selectedValue) {
+      return REMIND_OPTIONS_HTML.replace(
+        `value="${selectedValue}"`,
+        `value="${selectedValue}" selected`
+      );
+    }
+
+    function getWeekRangeLabel(w) {
+      const weekStart = new Date(SEMESTER_START);
+      weekStart.setDate(SEMESTER_START.getDate() + (w - 1) * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      const startStr = `${weekStart.getMonth() + 1}/${weekStart.getDate()}`;
+      const endStr = `${weekEnd.getMonth() + 1}/${weekEnd.getDate()}`;
+      return `第 ${w} 週 (${startStr}~${endStr})`;
+    }
+
+    /* ---------------- 課程資料存取（名稱 / 教室 / 顏色） ---------------- */
+    // 舊版資料是純文字字串，這裡做相容處理：能解析成 JSON 就當物件，否則視為純課程名稱
+
+    function getCourseData(day, period) {
+      const raw = localStorage.getItem(`course_${day}_${period}`);
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && 'name' in parsed) return parsed;
+      } catch (e) {
+        // 舊版純文字資料
+      }
+      return { name: raw, room: '', color: '' };
+    }
+
+    function setCourseData(day, period, data) {
+      if (!data || (!data.name && !data.room)) {
+        localStorage.removeItem(`course_${day}_${period}`);
+      } else {
+        localStorage.setItem(`course_${day}_${period}`, JSON.stringify(data));
+      }
+    }
+
+    function updateCourseField(day, period, field, value, inputEl) {
+      const data = getCourseData(day, period) || { name: '', room: '', color: '' };
+      data[field] = value;
+      setCourseData(day, period, data);
+      if (field === 'color' && inputEl) {
+        const td = inputEl.closest('td');
+        if (td) td.style.backgroundColor = value;
+      }
+      renderWeeklyPlanner();
+    }
+
+    /* ---------------- 班表資料存取（排班規則：日期區間 + 星期 + 時間 + 地點 + 備註） ---------------- */
+
+    function getShiftEntries() {
+      try {
+        return JSON.parse(localStorage.getItem('shiftEntries') || '[]');
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function setShiftEntries(entries) {
+      localStorage.setItem('shiftEntries', JSON.stringify(entries));
+    }
+
+    function updateShiftEntry(id, field, value) {
+      const entries = getShiftEntries();
+      const entry = entries.find(e => e.id === id);
+      if (!entry) return;
+      entry[field] = value;
+      setShiftEntries(entries);
+      renderShiftList();
+      renderWeeklyPlanner();
+      renderReminderPanel();
+      renderSalaryCalculator();
+      const calSection = document.getElementById('calendar');
+      if (calSection && calSection.classList.contains('active')) renderCalendar();
+    }
+
+    function updateShiftEntryTime(id, boundary, part, value) {
+      const entries = getShiftEntries();
+      const entry = entries.find(e => e.id === id);
+      if (!entry) return;
+      const key = boundary === 'start' ? 'startTime' : 'endTime';
+      let [h, m] = (entry[key] || '00:00').split(':');
+      h = h || '00';
+      m = m || '00';
+      if (part === 'hour') h = value || '00'; else m = value || '00';
+      entry[key] = `${h}:${m}`;
+      setShiftEntries(entries);
+      renderShiftList();
+      renderWeeklyPlanner();
+      renderReminderPanel();
+      renderSalaryCalculator();
+      const calSection = document.getElementById('calendar');
+      if (calSection && calSection.classList.contains('active')) renderCalendar();
+    }
+
+    function toggleShiftEntryWeekday(id, weekday, checked) {
+      const entries = getShiftEntries();
+      const entry = entries.find(e => e.id === id);
+      if (!entry) return;
+      const set = new Set(entry.weekdays || []);
+      if (checked) set.add(weekday); else set.delete(weekday);
+      entry.weekdays = Array.from(set).sort((a, b) => a - b);
+      setShiftEntries(entries);
+      renderShiftList();
+      renderWeeklyPlanner();
+      renderReminderPanel();
+      renderSalaryCalculator();
+      const calSection = document.getElementById('calendar');
+      if (calSection && calSection.classList.contains('active')) renderCalendar();
+    }
+
+    function removeShiftEntry(id) {
+      let entries = getShiftEntries();
+      entries = entries.filter(e => e.id !== id);
+      setShiftEntries(entries);
+      renderShiftList();
+      renderWeeklyPlanner();
+      renderReminderPanel();
+      renderSalaryCalculator();
+      const calSection = document.getElementById('calendar');
+      if (calSection && calSection.classList.contains('active')) renderCalendar();
+    }
+
+    // 取得某個實際日期當天適用的排班（依星期幾 + 日期區間篩選）
+    function getShiftsForDate(dateObj) {
+      const day = jsDayToOurDay(dateObj.getDay());
+      const dateStr = formatISODate(dateObj);
+      const entries = getShiftEntries();
+      return entries.filter(e => {
+        if (!e.weekdays || !e.weekdays.includes(day)) return false;
+        if (e.startDate && dateStr < e.startDate) return false;
+        if (e.endDate && dateStr > e.endDate) return false;
+        return true;
+      });
+    }
+
+    // 切換分頁
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      event.target.classList.add('active');
+      if (tabId === 'calendar') renderCalendar();
+      if (tabId === 'weekly') { renderWeeklyPlanner(); renderReminderPanel(); }
+      if (tabId === 'shift') { renderShiftList(); renderSalaryCalculator(); }
+    }
+
+    /* ---------------- 課表（24小時制時間選擇器 + 課程格） ---------------- */
+
+    function buildHourOptions(selected) {
+      let html = `<option value="">--</option>`;
+      for (let h = 0; h < 24; h++) {
+        const val = pad2(h);
+        html += `<option value="${val}" ${selected === val ? 'selected' : ''}>${val}</option>`;
+      }
+      return html;
+    }
+
+    function buildMinuteOptions(selected) {
+      let html = `<option value="">--</option>`;
+      for (let m = 0; m < 60; m += 5) {
+        const val = pad2(m);
+        html += `<option value="${val}" ${selected === val ? 'selected' : ''}>${val}</option>`;
+      }
+      return html;
+    }
+
+    function updateTime(period, boundary, part, value) {
+      const key = `time_${boundary}_${period}`;
+      const current = localStorage.getItem(key) || '';
+      let [h, m] = current.split(':');
+      h = h || '';
+      m = m || '';
+      if (part === 'hour') h = value; else m = value;
+      if (h === '' && m === '') {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, `${h || '00'}:${m || '00'}`);
+      }
+    }
+
+    // 建立課表：時間選擇器 + 課程格（名稱 / 教室 / 顏色）
+    function initTimetable() {
+      const tbody = document.getElementById('timetableBody');
+      tbody.innerHTML = '';
+
+      periods.forEach(p => {
+        const row = document.createElement('tr');
+        const periodTd = document.createElement('td');
+        periodTd.className = 'period-cell';
+
+        const startTime = localStorage.getItem(`time_start_${p}`) || '';
+        const endTime = localStorage.getItem(`time_end_${p}`) || '';
+        const [sh, sm] = startTime.split(':');
+        const [eh, em] = endTime.split(':');
+
+        periodTd.innerHTML = `
+          <div class="period-name">${p}</div>
+          <div class="time-picker-container">
+            <div class="time-row">
+              <select class="time-select" onchange="updateTime('${p}','start','hour',this.value)">${buildHourOptions(sh || '')}</select>
+              <span class="time-sep">:</span>
+              <select class="time-select" onchange="updateTime('${p}','start','minute',this.value)">${buildMinuteOptions(sm || '')}</select>
+            </div>
+            <span class="time-sep">～</span>
+            <div class="time-row">
+              <select class="time-select" onchange="updateTime('${p}','end','hour',this.value)">${buildHourOptions(eh || '')}</select>
+              <span class="time-sep">:</span>
+              <select class="time-select" onchange="updateTime('${p}','end','minute',this.value)">${buildMinuteOptions(em || '')}</select>
+            </div>
+          </div>
+        `;
+        row.appendChild(periodTd);
+
+        for (let d = 1; d <= 7; d++) {
+          const td = document.createElement('td');
+          td.style.position = 'relative';
+          const data = getCourseData(d, p) || { name: '', room: '', color: '' };
+          if (data.color) td.style.backgroundColor = data.color;
+
+          td.innerHTML = `
+            <input type="text" class="course-name-input" placeholder="+ 課程" value="${escapeHtml(data.name)}" oninput="updateCourseField(${d}, '${p}', 'name', this.value, this)">
+            <input type="text" class="course-room-input" placeholder="教室" value="${escapeHtml(data.room)}" oninput="updateCourseField(${d}, '${p}', 'room', this.value, this)">
+            <input type="color" class="course-color-input" value="${data.color || '#ffffff'}" title="設定顏色" onchange="updateCourseField(${d}, '${p}', 'color', this.value, this)">
+          `;
+          row.appendChild(td);
+        }
+        tbody.appendChild(row);
+      });
+    }
+
+    /* ---------------- 快速新增課程 Modal ---------------- */
+
+    function populateAddCourseModalPeriods() {
+      const startSel = document.getElementById('addCourseStartPeriod');
+      const endSel = document.getElementById('addCourseEndPeriod');
+      const optionsHtml = periods.map(p => `<option value="${p}">${p}</option>`).join('');
+      startSel.innerHTML = optionsHtml;
+      endSel.innerHTML = optionsHtml;
+    }
+
+    function openAddCourseModal() {
+      document.getElementById('addCourseModal').classList.add('show');
+    }
+
+    function closeAddCourseModal() {
+      document.getElementById('addCourseModal').classList.remove('show');
+      document.getElementById('addCourseName').value = '';
+      document.getElementById('addCourseRoom').value = '';
+      document.getElementById('addCourseColor').value = '#cfe8ff';
+    }
+
+    function submitAddCourse() {
+      const day = parseInt(document.getElementById('addCourseDay').value, 10);
+      const startPeriod = document.getElementById('addCourseStartPeriod').value;
+      const endPeriod = document.getElementById('addCourseEndPeriod').value;
+      const name = document.getElementById('addCourseName').value.trim();
+      const room = document.getElementById('addCourseRoom').value.trim();
+      const color = document.getElementById('addCourseColor').value;
+
+      if (!name) {
+        alert('請輸入課程名稱');
+        return;
+      }
+
+      let startIdx = periods.indexOf(startPeriod);
+      let endIdx = periods.indexOf(endPeriod);
+      if (startIdx === -1 || endIdx === -1) return;
+      if (startIdx > endIdx) { [startIdx, endIdx] = [endIdx, startIdx]; }
+
+      for (let i = startIdx; i <= endIdx; i++) {
+        setCourseData(day, periods[i], { name, room, color });
+      }
+
+      closeAddCourseModal();
+      initTimetable();
+      renderWeeklyPlanner();
+    }
+
+    /* ---------------- 快速新增排班 Modal ---------------- */
+
+    function populateAddShiftModalTimeSelects() {
+      document.getElementById('addShiftStartHour').innerHTML = buildHourOptions('');
+      document.getElementById('addShiftStartMinute').innerHTML = buildMinuteOptions('');
+      document.getElementById('addShiftEndHour').innerHTML = buildHourOptions('');
+      document.getElementById('addShiftEndMinute').innerHTML = buildMinuteOptions('');
+    }
+
+    function openAddShiftModal() {
+      const startDateInput = document.getElementById('addShiftStartDate');
+      if (!startDateInput.value) {
+        startDateInput.value = formatISODate(new Date());
+      }
+      document.getElementById('addShiftModal').classList.add('show');
+    }
+
+    function closeAddShiftModal() {
+      document.getElementById('addShiftModal').classList.remove('show');
+      document.getElementById('addShiftStartDate').value = '';
+      document.getElementById('addShiftEndDate').value = '';
+      document.querySelectorAll('#addShiftWeekdayGroup input[type="checkbox"]').forEach(cb => cb.checked = false);
+      document.getElementById('addShiftStartHour').value = '';
+      document.getElementById('addShiftStartMinute').value = '';
+      document.getElementById('addShiftEndHour').value = '';
+      document.getElementById('addShiftEndMinute').value = '';
+      document.getElementById('addShiftLocation').value = '';
+      document.getElementById('addShiftNote').value = '';
+      document.getElementById('addShiftColor').value = '#cfe8ff';
+    }
+
+    function submitAddShift() {
+      const startDate = document.getElementById('addShiftStartDate').value;
+      const endDate = document.getElementById('addShiftEndDate').value || null;
+      const weekdayChecks = document.querySelectorAll('#addShiftWeekdayGroup input[type="checkbox"]:checked');
+      const weekdays = Array.from(weekdayChecks).map(cb => parseInt(cb.value, 10));
+      const sh = document.getElementById('addShiftStartHour').value;
+      const sm = document.getElementById('addShiftStartMinute').value;
+      const eh = document.getElementById('addShiftEndHour').value;
+      const em = document.getElementById('addShiftEndMinute').value;
+      const location = document.getElementById('addShiftLocation').value.trim();
+      const note = document.getElementById('addShiftNote').value.trim();
+      const color = document.getElementById('addShiftColor').value;
+
+      if (!startDate) { alert('請選擇開始日期'); return; }
+      if (weekdays.length === 0) { alert('請至少選擇一個星期幾'); return; }
+      if (!sh || !sm || !eh || !em) { alert('請選擇完整的排班時間'); return; }
+      if (endDate && endDate < startDate) { alert('結束日期不能早於開始日期'); return; }
+
+      const startTime = `${sh}:${sm}`;
+      const endTime = `${eh}:${em}`;
+      if (startTime >= endTime) { alert('結束時間必須晚於開始時間'); return; }
+
+      // 檢查與課表是否有時間重疊
+      const conflicts = [];
+      weekdays.forEach(day => {
+        periods.forEach(p => {
+          const course = getCourseData(day, p);
+          if (!course || !course.name || course.name.trim() === '') return;
+          const pStart = localStorage.getItem(`time_start_${p}`);
+          const pEnd = localStorage.getItem(`time_end_${p}`);
+          if (!pStart || !pEnd) return;
+          if (startTime < pEnd && pStart < endTime) {
+            conflicts.push(`週${OUR_WEEKDAY_LABELS[day - 1]} 第${p}節「${course.name.trim()}」(${pStart}~${pEnd})`);
+          }
+        });
+      });
+
+      if (conflicts.length > 0) {
+        const proceed = confirm(`此排班時段與以下課程時間重疊：\n${conflicts.join('\n')}\n\n仍要新增這筆排班嗎？`);
+        if (!proceed) return;
+      }
+
+      const entries = getShiftEntries();
+      entries.push({
+        id: 'shift_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+        weekdays,
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+        location,
+        note,
+        color
+      });
+      setShiftEntries(entries);
+
+      closeAddShiftModal();
+      renderShiftList();
+      renderWeeklyPlanner();
+      renderReminderPanel();
+      renderSalaryCalculator();
+    }
+
+    /* ---------------- 班表分頁：排班規則列表 ---------------- */
+
+    function renderShiftList() {
+      const container = document.getElementById('shiftListContainer');
+      if (!container) return;
+
+      const entries = getShiftEntries();
+      if (entries.length === 0) {
+        container.innerHTML = `<div class="shift-list-empty">目前尚未新增任何排班，點擊上方「+ 新增排班」開始安排吧！</div>`;
+        return;
+      }
+
+      const sorted = [...entries].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+
+      container.innerHTML = sorted.map(entry => {
+        const weekdaySet = new Set(entry.weekdays || []);
+        const weekdayChecksHtml = OUR_WEEKDAY_LABELS.map((label, idx) => {
+          const wd = idx + 1;
+          const checked = weekdaySet.has(wd) ? 'checked' : '';
+          return `<label class="shift-weekday-check"><input type="checkbox" ${checked} onchange="toggleShiftEntryWeekday('${entry.id}', ${wd}, this.checked)">${label}</label>`;
+        }).join('');
+
+        const [sh, sm] = (entry.startTime || '00:00').split(':');
+        const [eh, em] = (entry.endTime || '00:00').split(':');
+
+        return `
+          <div class="shift-entry-card" style="border-left-color: ${entry.color || '#cfe8ff'};">
+            <div class="shift-entry-top">
+              <div class="shift-weekday-group">${weekdayChecksHtml}</div>
+              <div class="shift-entry-top-actions">
+                <input type="color" class="shift-entry-color" value="${entry.color || '#cfe8ff'}" title="顏色" onchange="updateShiftEntry('${entry.id}', 'color', this.value)">
+                <button type="button" class="shift-entry-remove" onclick="removeShiftEntry('${entry.id}')">✕ 刪除</button>
+              </div>
+            </div>
+            <div class="shift-entry-body">
+              <div class="shift-entry-field">
+                <label>開始日期</label>
+                <input type="date" value="${entry.startDate || ''}" onchange="updateShiftEntry('${entry.id}', 'startDate', this.value)">
+              </div>
+              <div class="shift-entry-field">
+                <label>結束日期（留空＝持續進行）</label>
+                <input type="date" value="${entry.endDate || ''}" onchange="updateShiftEntry('${entry.id}', 'endDate', this.value)">
+              </div>
+              <div class="shift-entry-field">
+                <label>時間</label>
+                <div class="time-row">
+                  <select onchange="updateShiftEntryTime('${entry.id}','start','hour',this.value)">${buildHourOptions(sh)}</select>
+                  <span class="time-sep">:</span>
+                  <select onchange="updateShiftEntryTime('${entry.id}','start','minute',this.value)">${buildMinuteOptions(sm)}</select>
+                  <span class="time-sep">～</span>
+                  <select onchange="updateShiftEntryTime('${entry.id}','end','hour',this.value)">${buildHourOptions(eh)}</select>
+                  <span class="time-sep">:</span>
+                  <select onchange="updateShiftEntryTime('${entry.id}','end','minute',this.value)">${buildMinuteOptions(em)}</select>
+                </div>
+              </div>
+              <div class="shift-entry-field shift-entry-field-wide">
+                <label>地點</label>
+                <input type="text" value="${escapeHtml(entry.location || '')}" oninput="updateShiftEntry('${entry.id}', 'location', this.value)">
+              </div>
+              <div class="shift-entry-field shift-entry-field-wide">
+                <label>備註</label>
+                <input type="text" value="${escapeHtml(entry.note || '')}" oninput="updateShiftEntry('${entry.id}', 'note', this.value)">
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    /* ---------------- 本月薪資試算（依排班地點分別計算時薪） ---------------- */
+
+    function timeToMinutes(t) {
+      const [h, m] = (t || '0:0').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    }
+
+    function getWage(job) {
+      const raw = localStorage.getItem(`wage_${encodeURIComponent(job)}`);
+      const val = parseFloat(raw);
+      return isNaN(val) ? 0 : val;
+    }
+
+    function setWage(job, value) {
+      const key = `wage_${encodeURIComponent(job)}`;
+      const val = parseFloat(value);
+      if (isNaN(val) || val <= 0) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, String(val));
+      }
+    }
+
+    function updateWageInput(encodedJob, value) {
+      setWage(decodeURIComponent(encodedJob), value);
+      renderSalaryCalculator();
+    }
+
+    function changeSalaryMonth(offset) {
+      salaryCalDate.setMonth(salaryCalDate.getMonth() + offset);
+      renderSalaryCalculator();
+    }
+
+    function renderSalaryCalculator() {
+      const labelEl = document.getElementById('salaryMonthLabel');
+      const jobsListEl = document.getElementById('salaryJobsList');
+      const totalEl = document.getElementById('salaryTotal');
+      if (!labelEl || !jobsListEl || !totalEl) return;
+
+      const year = salaryCalDate.getFullYear();
+      const month = salaryCalDate.getMonth();
+      labelEl.textContent = `${year} 年 ${month + 1} 月`;
+
+      const totalDays = new Date(year, month + 1, 0).getDate();
+      const hoursByJob = new Map(); // 地點 -> 累計時數
+
+      for (let d = 1; d <= totalDays; d++) {
+        const dateObj = new Date(year, month, d);
+        const shiftsToday = getShiftsForDate(dateObj);
+        shiftsToday.forEach(entry => {
+          const jobKey = (entry.location && entry.location.trim() !== '') ? entry.location.trim() : '未命名地點';
+          let diffMin = timeToMinutes(entry.endTime) - timeToMinutes(entry.startTime);
+          if (diffMin < 0) diffMin = 0; // 目前不支援跨夜班別
+          hoursByJob.set(jobKey, (hoursByJob.get(jobKey) || 0) + diffMin / 60);
+        });
+      }
+
+      if (hoursByJob.size === 0) {
+        jobsListEl.innerHTML = `<div class="salary-empty">這個月沒有排班紀錄，請先到上方新增排班。</div>`;
+        totalEl.innerHTML = '';
+        return;
+      }
+
+      let grandTotal = 0;
+      const rows = Array.from(hoursByJob.entries()).map(([job, hours]) => {
+        const wage = getWage(job);
+        const subtotal = hours * wage;
+        grandTotal += subtotal;
+        return `
+          <div class="salary-job-row">
+            <div class="salary-job-name">${escapeHtml(job)}</div>
+            <div class="salary-job-hours">${hours.toFixed(1)} 小時</div>
+            <div class="salary-job-wage">
+              時薪 $
+              <input type="number" min="0" step="0.01" class="salary-wage-input" value="${wage || ''}" placeholder="0" oninput="updateWageInput('${encodeURIComponent(job)}', this.value)">
+            </div>
+            <div class="salary-job-subtotal">$${Math.round(subtotal).toLocaleString()}</div>
+          </div>
+        `;
+      }).join('');
+
+      jobsListEl.innerHTML = rows;
+      totalEl.innerHTML = `本月預估總薪資：<span class="salary-total-amount">$${Math.round(grandTotal).toLocaleString()}</span>`;
+    }
+
+    /* ---------------- 週數切換 / 快速跳轉 ---------------- */
+
+    function changeWeek(offset) {
+      activeWeek += offset;
+      if (activeWeek < 1) activeWeek = 1;
+      updateWeekDisplay();
+      renderWeeklyPlanner();
+      renderReminderPanel();
+    }
+
+    function populateWeekJumpSelect() {
+      const select = document.getElementById('weekJumpSelect');
+      select.innerHTML = '';
+      for (let w = 1; w <= maxJumpWeeks; w++) {
+        const opt = document.createElement('option');
+        opt.value = w;
+        opt.textContent = getWeekRangeLabel(w);
+        select.appendChild(opt);
+      }
+    }
+
+    function jumpToWeek(value) {
+      const w = parseInt(value, 10);
+      if (!isNaN(w) && w >= 1) {
+        activeWeek = w;
+        updateWeekDisplay();
+        renderWeeklyPlanner();
+        renderReminderPanel();
+      }
+    }
+
+    function updateWeekDisplay() {
+      const weekStart = new Date(SEMESTER_START);
+      weekStart.setDate(SEMESTER_START.getDate() + (activeWeek - 1) * 7);
+
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+
+      const startStr = `${weekStart.getFullYear()}-${weekStart.getMonth() + 1}/${weekStart.getDate()}`;
+      const endStr = `${weekEnd.getMonth() + 1}/${weekEnd.getDate()}`;
+
+      document.getElementById('currentWeekDisplay').innerHTML = `第 ${activeWeek} 週 <span class="week-date-range">(${startStr} ~ ${endStr})</span>`;
+
+      const select = document.getElementById('weekJumpSelect');
+      if (select) {
+        if (activeWeek > maxJumpWeeks) {
+          for (let w = maxJumpWeeks + 1; w <= activeWeek; w++) {
+            const opt = document.createElement('option');
+            opt.value = w;
+            opt.textContent = getWeekRangeLabel(w);
+            select.appendChild(opt);
+          }
+          maxJumpWeeks = activeWeek;
+        }
+        select.value = activeWeek;
+      }
+    }
+
+    /* ---------------- 週行事曆紀錄（含提醒設定） ---------------- */
+
+    function parseRecordData(raw) {
+      if (!raw) return { text: '', remindLead: null };
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && 'text' in parsed) {
+          return { text: parsed.text || '', remindLead: (parsed.remindLead === undefined) ? null : parsed.remindLead };
+        }
+      } catch (e) {
+        // 舊版純文字資料
+      }
+      return { text: raw, remindLead: null };
+    }
+
+    function setRecordData(week, day, slot, data) {
+      const key = `record_w${week}_d${day}_p${slot}`;
+      if (!data.text) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(data));
+      }
+    }
+
+    function updateRecordText(week, day, slot, value) {
+      const key = `record_w${week}_d${day}_p${slot}`;
+      const data = parseRecordData(localStorage.getItem(key));
+      data.text = value;
+      setRecordData(week, day, slot, data);
+      renderReminderPanel();
+    }
+
+    function updateRecordRemind(week, day, slot, value) {
+      const key = `record_w${week}_d${day}_p${slot}`;
+      const data = parseRecordData(localStorage.getItem(key));
+      data.remindLead = value === '' ? null : parseInt(value, 10);
+      setRecordData(week, day, slot, data);
+      renderReminderPanel();
+    }
+
+    function getOpenedPeriods(week, day) {
+      try {
+        return JSON.parse(localStorage.getItem(`record_open_w${week}_d${day}`) || '[]');
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function setOpenedPeriods(week, day, arr) {
+      localStorage.setItem(`record_open_w${week}_d${day}`, JSON.stringify(arr));
+    }
+
+    function togglePillRecord(week, day, slot) {
+      const opened = getOpenedPeriods(week, day);
+      if (!opened.includes(slot)) {
+        opened.push(slot);
+        setOpenedPeriods(week, day, opened);
+        renderWeeklyPlanner();
+      }
+    }
+
+    function removeRecord(week, day, slot) {
+      let opened = getOpenedPeriods(week, day);
+      opened = opened.filter(s => s !== slot);
+      setOpenedPeriods(week, day, opened);
+      localStorage.removeItem(`record_w${week}_d${day}_p${slot}`);
+      renderWeeklyPlanner();
+      renderReminderPanel();
+    }
+
+    // slot 可能是課表節次代碼（如 '1','N','A'）或排班規則 id（如 'shift_...'）
+    function getItemLabelForSlot(day, slot) {
+      if (periods.includes(slot)) {
+        const course = getCourseData(day, slot);
+        return (course && course.name && course.name.trim() !== '') ? course.name.trim() : null;
+      }
+      const entries = getShiftEntries();
+      const entry = entries.find(e => e.id === slot);
+      if (!entry) return null;
+      const locationLabel = entry.location ? entry.location.trim() : '排班';
+      return `🕘 ${locationLabel} ${entry.startTime}~${entry.endTime}`;
+    }
+
+    // 同一天內，相同課程只顯示一個標籤（取第一次出現的節次作為代表），加上當天適用的排班
+    function buildCoursesRow(week, day) {
+      const seen = new Map();
+      periods.forEach(p => {
+        const course = getCourseData(day, p);
+        if (course && course.name && course.name.trim() !== '') {
+          const key = course.name.trim();
+          if (!seen.has(key)) seen.set(key, { slot: p, color: course.color || '' });
+        }
+      });
+
+      const dateObj = getDateForWeekDay(week, day);
+      const shiftsToday = getShiftsForDate(dateObj);
+      shiftsToday.forEach(entry => {
+        const label = `🕘 ${entry.location ? entry.location.trim() : '排班'} ${entry.startTime}~${entry.endTime}`;
+        if (!seen.has(label)) seen.set(label, { slot: entry.id, color: entry.color || '' });
+      });
+
+      if (seen.size === 0) return '';
+      const pills = Array.from(seen.entries()).map(([label, info]) => {
+        const style = info.color ? ` style="background:${info.color};border-color:${info.color};"` : '';
+        return `<button type="button" class="course-pill" onclick="togglePillRecord(${week}, ${day}, '${info.slot}')"${style}>${escapeHtml(label)}</button>`;
+      }).join('');
+      return `<div class="courses-row">${pills}</div>`;
+    }
+
+    function buildRecordsRow(week, day) {
+      const opened = getOpenedPeriods(week, day);
+      if (opened.length === 0) return '';
+      const rows = opened.map(slot => {
+        const itemName = getItemLabelForSlot(day, slot) || '(項目已刪除)';
+        const key = `record_w${week}_d${day}_p${slot}`;
+        const data = parseRecordData(localStorage.getItem(key));
+        const remindVal = (data.remindLead === null || data.remindLead === undefined) ? '' : String(data.remindLead);
+        return `
+          <div class="record-row">
+            <span class="record-course">${escapeHtml(itemName)}</span>
+            <input type="text" class="record-input" value="${escapeHtml(data.text)}" placeholder="輸入作業/考試/待辦事項..." oninput="updateRecordText(${week}, ${day}, '${slot}', this.value)">
+            <select class="record-remind-select" onchange="updateRecordRemind(${week}, ${day}, '${slot}', this.value)">${buildRemindSelectHtml(remindVal)}</select>
+            <button type="button" class="record-remove" onclick="removeRecord(${week}, ${day}, '${slot}')" title="移除">✕</button>
+          </div>`;
+      }).join('');
+      return `<div class="records-container">${rows}</div>`;
+    }
+
+    function renderWeeklyPlanner() {
+      const container = document.getElementById('weeklyContainer');
+      container.innerHTML = '';
+
+      const weekStart = new Date(SEMESTER_START);
+      weekStart.setDate(SEMESTER_START.getDate() + (activeWeek - 1) * 7);
+
+      days.forEach((day, index) => {
+        const dayDate = new Date(weekStart);
+        dayDate.setDate(weekStart.getDate() + index);
+        const dateStr = `${dayDate.getMonth() + 1}/${dayDate.getDate()}`;
+        const dayIndex = index + 1; // 對應課表的 週一(1) ~ 週日(7)
+
+        const storageKey = `note_w${activeWeek}_d${index}`;
+        const savedNote = localStorage.getItem(storageKey) || '';
+
+        const coursesRowHtml = buildCoursesRow(activeWeek, dayIndex);
+        const recordsHtml = buildRecordsRow(activeWeek, dayIndex);
+
+        const card = document.createElement('div');
+        card.className = 'day-card';
+        card.innerHTML = `
+          <div class="day-label">
+            <span>${day}</span>
+            <span class="date-subtext">${dateStr}</span>
+          </div>
+          <div class="day-right">
+            ${coursesRowHtml}
+            ${recordsHtml}
+            <textarea class="day-notes" placeholder="記錄今日課堂筆記、作業或待辦事項..." oninput="localStorage.setItem('${storageKey}', this.value)">${escapeHtml(savedNote)}</textarea>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    /* ---------------- 月曆（條列式待辦 + 提醒設定 + 自動顯示排班） ---------------- */
+
+    function getCalTodos(year, month, day) {
+      const key = `caltodos_${year}-${month}-${day}`;
+      try {
+        return JSON.parse(localStorage.getItem(key)) || [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function setCalTodos(year, month, day, todos) {
+      const key = `caltodos_${year}-${month}-${day}`;
+      if (!todos || todos.length === 0) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(todos));
+      }
+    }
+
+    function addCalTodo(year, month, day) {
+      const inputEl = document.getElementById(`calAddInput_${year}_${month}_${day}`);
+      const remindEl = document.getElementById(`calAddRemind_${year}_${month}_${day}`);
+      const text = inputEl.value.trim();
+      if (!text) return;
+      const remindVal = remindEl.value;
+      const remindLead = remindVal === '' ? null : parseInt(remindVal, 10);
+      const todos = getCalTodos(year, month, day);
+      todos.push({ id: 't' + Date.now() + '_' + Math.floor(Math.random() * 10000), text, done: false, remindLead });
+      setCalTodos(year, month, day, todos);
+      renderCalendar();
+      renderReminderPanel();
+    }
+
+    function toggleCalTodo(year, month, day, id, done) {
+      const todos = getCalTodos(year, month, day);
+      const item = todos.find(t => t.id === id);
+      if (item) item.done = done;
+      setCalTodos(year, month, day, todos);
+      renderReminderPanel();
+    }
+
+    function updateCalTodoText(year, month, day, id, value) {
+      const todos = getCalTodos(year, month, day);
+      const item = todos.find(t => t.id === id);
+      if (item) item.text = value;
+      setCalTodos(year, month, day, todos);
+      renderReminderPanel();
+    }
+
+    function updateCalTodoRemind(year, month, day, id, value) {
+      const todos = getCalTodos(year, month, day);
+      const item = todos.find(t => t.id === id);
+      if (item) item.remindLead = value === '' ? null : parseInt(value, 10);
+      setCalTodos(year, month, day, todos);
+      renderReminderPanel();
+    }
+
+    function removeCalTodo(year, month, day, id) {
+      let todos = getCalTodos(year, month, day);
+      todos = todos.filter(t => t.id !== id);
+      setCalTodos(year, month, day, todos);
+      renderCalendar();
+      renderReminderPanel();
+    }
+
+    function changeMonth(offset) {
+      currentCalDate.setMonth(currentCalDate.getMonth() + offset);
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const grid = document.getElementById('calendarGrid');
+      grid.innerHTML = '';
+      const year = currentCalDate.getFullYear();
+      const month = currentCalDate.getMonth();
+
+      document.getElementById('monthYearDisplay').innerText = `${year} 年 ${month + 1} 月`;
+
+      const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+      weekDays.forEach(wd => {
+        const th = document.createElement('div');
+        th.className = 'calendar-cell header';
+        th.innerText = wd;
+        grid.appendChild(th);
+      });
+
+      const firstDay = new Date(year, month, 1).getDay();
+      const totalDays = new Date(year, month + 1, 0).getDate();
+
+      for (let i = 0; i < firstDay; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'calendar-cell empty';
+        grid.appendChild(emptyCell);
+      }
+
+      for (let d = 1; d <= totalDays; d++) {
+        const cell = document.createElement('div');
+        cell.className = 'calendar-cell';
+
+        const dateObj = new Date(year, month, d);
+        const shiftsForDay = getShiftsForDate(dateObj);
+        const shiftsHtml = shiftsForDay.map(entry => {
+          const style = entry.color ? ` style="background:${entry.color};border-color:${entry.color};"` : '';
+          const label = entry.location ? entry.location.trim() : '排班';
+          const timeLabel = `${entry.startTime}~${entry.endTime}`;
+          const noteText = entry.note ? `｜${escapeHtml(entry.note)}` : '';
+          return `<span class="cal-shift-badge"${style}>🕘 ${escapeHtml(label)} ${timeLabel}${noteText}</span>`;
+        }).join('');
+
+        const todos = getCalTodos(year, month, d);
+        const todosHtml = todos.map(item => {
+          const remindVal = (item.remindLead === null || item.remindLead === undefined) ? '' : String(item.remindLead);
+          return `
+            <div class="cal-todo-item ${item.done ? 'done' : ''}">
+              <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleCalTodo(${year}, ${month}, ${d}, '${item.id}', this.checked)">
+              <input type="text" class="cal-todo-text" value="${escapeHtml(item.text)}" oninput="updateCalTodoText(${year}, ${month}, ${d}, '${item.id}', this.value)">
+              <select class="cal-todo-remind" onchange="updateCalTodoRemind(${year}, ${month}, ${d}, '${item.id}', this.value)">${buildRemindSelectHtml(remindVal)}</select>
+              <button type="button" class="cal-todo-remove" onclick="removeCalTodo(${year}, ${month}, ${d}, '${item.id}')">✕</button>
+            </div>`;
+        }).join('');
+
+        cell.innerHTML = `
+          <div class="day-num">${d}</div>
+          ${shiftsHtml ? `<div class="cal-shift-list">${shiftsHtml}</div>` : ''}
+          <div class="cal-todo-list">${todosHtml}</div>
+          <div class="cal-add-row">
+            <input type="text" class="cal-add-input" id="calAddInput_${year}_${month}_${d}" placeholder="+ 新增待辦" onkeydown="if(event.key==='Enter'){addCalTodo(${year}, ${month}, ${d});}">
+            <select class="cal-add-remind" id="calAddRemind_${year}_${month}_${d}">${REMIND_OPTIONS_HTML}</select>
+            <button type="button" class="cal-add-btn" onclick="addCalTodo(${year}, ${month}, ${d})">＋</button>
+          </div>
+        `;
+        grid.appendChild(cell);
+      }
+    }
+
+    /* ---------------- 提醒總覽（掃描週行事曆紀錄 + 月曆待辦） ---------------- */
+
+    function getAllReminderItems() {
+      const items = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+
+        if (key.startsWith('record_w')) {
+          const m = key.match(/^record_w(\d+)_d(\d+)_p(.+)$/);
+          if (!m) continue;
+          const week = parseInt(m[1], 10);
+          const day = parseInt(m[2], 10);
+          const slot = m[3];
+          const data = parseRecordData(localStorage.getItem(key));
+          if (!data.text || data.remindLead === null || data.remindLead === undefined) continue;
+
+          const title = getItemLabelForSlot(day, slot) || '週行事曆';
+          items.push({
+            date: getDateForWeekDay(week, day),
+            title: title,
+            text: data.text,
+            remindLead: data.remindLead
+          });
+
+        } else if (key.startsWith('caltodos_')) {
+          const datePart = key.substring('caltodos_'.length);
+          const parts = datePart.split('-');
+          if (parts.length !== 3) continue;
+          const y = parseInt(parts[0], 10);
+          const mo = parseInt(parts[1], 10);
+          const da = parseInt(parts[2], 10);
+          let todos = [];
+          try { todos = JSON.parse(localStorage.getItem(key)) || []; } catch (e) { todos = []; }
+
+          todos.forEach(todo => {
+            if (todo.done) return;
+            if (todo.remindLead === null || todo.remindLead === undefined) return;
+            items.push({
+              date: new Date(y, mo, da),
+              title: '月曆待辦',
+              text: todo.text,
+              remindLead: todo.remindLead
+            });
+          });
+        }
+      }
+
+      const filtered = items.filter(item => {
+        const due = new Date(item.date);
+        due.setHours(0, 0, 0, 0);
+        const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
+        return diffDays >= 0 && diffDays <= item.remindLead;
+      });
+
+      filtered.sort((a, b) => a.date - b.date);
+      return filtered;
+    }
+
+    function renderReminderPanel() {
+      const container = document.getElementById('reminderList');
+      if (!container) return;
+
+      const items = getAllReminderItems();
+      if (items.length === 0) {
+        container.innerHTML = `<div class="reminder-empty">目前沒有即將到期的提醒事項</div>`;
+        return;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      container.innerHTML = items.map(item => {
+        const due = new Date(item.date);
+        due.setHours(0, 0, 0, 0);
+        const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
+        const badge = diffDays === 0 ? '今天' : `${diffDays}天後`;
+        const weekdayLabel = WEEKDAY_LABELS_ZH[due.getDay()];
+        return `
+          <div class="reminder-item">
+            <div class="reminder-item-date">${formatDateShort(due)}（週${weekdayLabel}）<span class="reminder-item-badge">${badge}</span></div>
+            <div class="reminder-item-title">${escapeHtml(item.title)}</div>
+            <div class="reminder-item-text">${escapeHtml(item.text)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 初始化
+    initTimetable();
+    populateAddCourseModalPeriods();
+    populateAddShiftModalTimeSelects();
+    populateWeekJumpSelect();
+    updateWeekDisplay();
+    renderWeeklyPlanner();
+    renderReminderPanel();
+  </script>
+</body>
+</html>

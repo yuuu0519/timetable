@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>大學聯絡簿 Planner</title>
+  <!-- Firebase（雲端同步用，僅在你填入自己的設定值後才會啟用） -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <style>
     :root {
       --primary-color: #5c6b73;
@@ -46,6 +50,7 @@
     .week-jump-select:hover { background: #e2e8f0; }
 
     .nav-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .data-io { display: flex; gap: 8px; flex-wrap: wrap; }
     .tab-btn {
       background: transparent; border: none; padding: 10px 18px; border-radius: 8px;
       cursor: pointer; font-size: 0.95rem; font-weight: 600; color: var(--accent);
@@ -322,6 +327,12 @@
       <button class="tab-btn" onclick="switchTab('calendar')">月曆</button>
       <button class="tab-btn" onclick="switchTab('shift')">班表</button>
     </nav>
+    <div class="data-io">
+      <button class="week-btn" id="syncStatusBtn" onclick="openSyncPanel()">☁ 設定同步</button>
+      <button class="week-btn" onclick="exportData()" title="把所有資料匯出成備份檔">⬇ 匯出備份</button>
+      <button class="week-btn" onclick="document.getElementById('importFileInput').click()" title="從備份檔還原資料">⬆ 匯入備份</button>
+      <input type="file" id="importFileInput" accept="application/json" style="display:none" onchange="importData(event)">
+    </div>
   </header>
 
   <!-- 課表分頁 -->
@@ -510,7 +521,55 @@
     </div>
   </div>
 
+  <!-- 雲端同步設定 Modal -->
+  <div id="syncModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>☁️ 雲端同步設定</h3>
+
+      <div id="syncConfigWarning" style="display:none; background:#fef3c7; color:#92400e; padding:10px 12px; border-radius:8px; font-size:0.82rem; margin-bottom:14px; line-height:1.5;">
+        尚未設定 Firebase 連線資訊，請先參考說明文件完成 Firebase 專案設定，並把 firebaseConfig 貼到程式碼最上面之後再使用同步功能。
+      </div>
+
+      <div id="syncConnectedInfo" style="display:none; margin-bottom:14px;">
+        <p style="font-size:0.85rem; color:#64748b; margin-bottom:10px; line-height:1.6;">
+          目前已連接同步。在其他裝置打開同一個網址，輸入完全相同的同步代碼，就會自動看到一樣的資料。
+        </p>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button type="button" class="modal-btn cancel" onclick="disconnectSync()">取消同步</button>
+        </div>
+      </div>
+
+      <div id="syncConnectForm">
+        <div class="modal-field">
+          <label>同步代碼</label>
+          <input type="text" id="syncCodeInput" placeholder="自己想一組不容易被猜到的代碼">
+        </div>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-bottom:14px; line-height:1.6;">
+          第一台裝置：輸入任意代碼即可開始同步。<br>
+          其他裝置：輸入「完全相同」的代碼，就會自動抓取同一份資料。<br>
+          請不要使用容易被猜到的代碼，也不要分享給別人。
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="modal-btn cancel" onclick="closeSyncPanel()">關閉</button>
+          <button type="button" class="modal-btn confirm" onclick="submitSyncCode()">連接同步</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
+    // ====== 請在這裡貼上你的 Firebase 設定 ======
+    // 依照說明文件建立好 Firebase 專案後，把 firebaseConfig 物件內容整個貼進來取代下面這一段
+    const firebaseConfig = {
+      apiKey: "AIzaSyBB0fcFzfTcgTMDDVXQ7ZP2n5NbpCpXUjk",
+      authDomain: "timetable-cb840.firebaseapp.com",
+      projectId: "timetable-cb840",
+      storageBucket: "timetable-cb840.firebasestorage.app",
+      messagingSenderId: "62088850254",
+      appId: "1:62088850254:web:d24bf90390629b1e154c1f"
+    };
+    // ============================================
+
     // 預設 9/7 開學日
     const currentYear = new Date().getFullYear();
     const SEMESTER_START = new Date(currentYear, 8, 7); // 8 代表 9 月
@@ -590,6 +649,308 @@
       const startStr = `${weekStart.getMonth() + 1}/${weekStart.getDate()}`;
       const endStr = `${weekEnd.getMonth() + 1}/${weekEnd.getDate()}`;
       return `第 ${w} 週 (${startStr}~${endStr})`;
+    }
+
+    /* ---------------- 資料匯出／匯入（localStorage 是跟著網址走的，換裝置或搬家記得先匯出備份） ---------------- */
+
+    function exportData() {
+      const data = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        data[key] = localStorage.getItem(key);
+      }
+
+      const payload = {
+        app: '大學聯絡簿 Planner',
+        exportedAt: new Date().toISOString(),
+        data
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `課表聯絡簿備份_${formatISODate(new Date())}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const payload = JSON.parse(e.target.result);
+          const data = (payload && typeof payload === 'object' && payload.data) ? payload.data : payload;
+
+          if (!data || typeof data !== 'object') {
+            alert('這個檔案格式不正確，無法匯入。');
+            return;
+          }
+
+          const proceed = confirm('匯入將會覆蓋目前瀏覽器中同名的資料，確定要繼續嗎？');
+          if (!proceed) return;
+
+          Object.keys(data).forEach(key => {
+            localStorage.setItem(key, data[key]);
+          });
+
+          alert('匯入完成！頁面即將重新整理以套用資料。');
+          location.reload();
+        } catch (err) {
+          alert('讀取檔案失敗，請確認是否為正確的備份檔案。');
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    /* ---------------- 雲端同步（Firebase Firestore + 自訂同步代碼） ---------------- */
+
+    const FIREBASE_IS_CONFIGURED = !!(firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('在這裡'));
+    const SYNC_CODE_KEY = '_syncCode';
+    const SYNC_HASH_KEY = '_syncCode_hash';
+
+    let cloudAuth = null;
+    let cloudDb = null;
+    let cloudSyncEnabled = false;
+    let cloudSyncTimer = null;
+    let cloudUnsubscribe = null;
+    let applyingRemoteUpdate = false;
+
+    // 保留原始的 localStorage 方法，避免套用遠端資料時又觸發一次上傳造成循環
+    const _origSetItem = localStorage.setItem.bind(localStorage);
+    const _origRemoveItem = localStorage.removeItem.bind(localStorage);
+    const _origClear = localStorage.clear.bind(localStorage);
+
+    localStorage.setItem = function (key, value) {
+      _origSetItem(key, value);
+      if (key !== SYNC_CODE_KEY && key !== SYNC_HASH_KEY) scheduleCloudPush();
+    };
+    localStorage.removeItem = function (key) {
+      _origRemoveItem(key);
+      if (key !== SYNC_CODE_KEY && key !== SYNC_HASH_KEY) scheduleCloudPush();
+    };
+
+    function scheduleCloudPush() {
+      if (!cloudSyncEnabled || applyingRemoteUpdate) return;
+      clearTimeout(cloudSyncTimer);
+      cloudSyncTimer = setTimeout(pushLocalDataToCloud, 1200);
+    }
+
+    async function sha256Hex(text) {
+      const enc = new TextEncoder().encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', enc);
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function getAllLocalData() {
+      const data = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key === SYNC_CODE_KEY || key === SYNC_HASH_KEY) continue;
+        data[key] = localStorage.getItem(key);
+      }
+      return data;
+    }
+
+    function refreshAllViews() {
+      initTimetable();
+      populateWeekJumpSelect();
+      updateWeekDisplay();
+      renderWeeklyPlanner();
+      renderReminderPanel();
+      const calSection = document.getElementById('calendar');
+      if (calSection && calSection.classList.contains('active')) renderCalendar();
+      const shiftSection = document.getElementById('shift');
+      if (shiftSection && shiftSection.classList.contains('active')) {
+        renderShiftList();
+        renderSalaryCalculator();
+      }
+    }
+
+    async function pushLocalDataToCloud() {
+      if (!cloudSyncEnabled || !cloudDb) return;
+      const docId = localStorage.getItem(SYNC_HASH_KEY);
+      if (!docId) return;
+      try {
+        updateSyncStatus('syncing');
+        await cloudDb.collection('syncedPlanners').doc(docId).set({
+          data: getAllLocalData(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        updateSyncStatus('synced');
+      } catch (err) {
+        console.error('雲端同步失敗', err);
+        updateSyncStatus('error');
+      }
+    }
+
+    function applyCloudDataToLocal(cloudData) {
+      applyingRemoteUpdate = true;
+      const keepCode = localStorage.getItem(SYNC_CODE_KEY);
+      const keepHash = localStorage.getItem(SYNC_HASH_KEY);
+      _origClear();
+      if (keepCode) _origSetItem(SYNC_CODE_KEY, keepCode);
+      if (keepHash) _origSetItem(SYNC_HASH_KEY, keepHash);
+      Object.keys(cloudData || {}).forEach(key => {
+        _origSetItem(key, cloudData[key]);
+      });
+      applyingRemoteUpdate = false;
+      refreshAllViews();
+    }
+
+    function listenToCloud(docId) {
+      if (cloudUnsubscribe) cloudUnsubscribe();
+      cloudUnsubscribe = cloudDb.collection('syncedPlanners').doc(docId).onSnapshot(
+        snap => {
+          if (!snap.exists) return;
+          applyCloudDataToLocal(snap.data().data || {});
+          updateSyncStatus('synced');
+        },
+        err => {
+          console.error('雲端監聽失敗', err);
+          updateSyncStatus('error');
+        }
+      );
+    }
+
+    async function connectSyncCode(code, resolution) {
+      // resolution: 'auto'（雲端沒資料時直接上傳）| 'useCloud'（用雲端覆蓋本機）| 'useLocal'（用本機覆蓋雲端）
+      try {
+        updateSyncStatus('connecting');
+        if (!cloudAuth.currentUser) {
+          await cloudAuth.signInAnonymously();
+        }
+
+        const docId = await sha256Hex(code);
+        const docRef = cloudDb.collection('syncedPlanners').doc(docId);
+        const snap = await docRef.get();
+
+        if (snap.exists && resolution === 'useCloud') {
+          applyCloudDataToLocal(snap.data().data || {});
+        }
+
+        _origSetItem(SYNC_CODE_KEY, code);
+        _origSetItem(SYNC_HASH_KEY, docId);
+        cloudSyncEnabled = true;
+
+        if (!snap.exists || resolution === 'useLocal') {
+          await pushLocalDataToCloud();
+        }
+
+        listenToCloud(docId);
+        updateSyncStatus('synced');
+        closeSyncPanel();
+        alert('同步已啟用！在其他裝置輸入同一組代碼即可同步資料。');
+      } catch (err) {
+        console.error(err);
+        updateSyncStatus('error');
+        alert('連接雲端失敗，請確認網路連線與 Firebase 設定是否正確。');
+      }
+    }
+
+    function disconnectSync() {
+      if (!confirm('確定要取消雲端同步嗎？這台裝置之後的變更將不會再上傳。')) return;
+      if (cloudUnsubscribe) { cloudUnsubscribe(); cloudUnsubscribe = null; }
+      cloudSyncEnabled = false;
+      _origRemoveItem(SYNC_CODE_KEY);
+      _origRemoveItem(SYNC_HASH_KEY);
+      updateSyncStatus('disabled');
+      closeSyncPanel();
+    }
+
+    function updateSyncStatus(status) {
+      const el = document.getElementById('syncStatusBtn');
+      if (!el) return;
+      const map = {
+        disabled: '☁ 設定同步',
+        connecting: '🔄 連接中...',
+        synced: '☁️ 已同步',
+        syncing: '🔄 同步中...',
+        error: '⚠️ 同步異常'
+      };
+      el.textContent = map[status] || map.disabled;
+    }
+
+    function openSyncPanel() {
+      document.getElementById('syncModal').classList.add('show');
+      const savedCode = localStorage.getItem(SYNC_CODE_KEY) || '';
+      document.getElementById('syncCodeInput').value = savedCode;
+      document.getElementById('syncConfigWarning').style.display = FIREBASE_IS_CONFIGURED ? 'none' : 'block';
+      document.getElementById('syncConnectedInfo').style.display = cloudSyncEnabled ? 'block' : 'none';
+      document.getElementById('syncConnectForm').style.display = cloudSyncEnabled ? 'none' : 'block';
+    }
+
+    function closeSyncPanel() {
+      document.getElementById('syncModal').classList.remove('show');
+    }
+
+    async function submitSyncCode() {
+      if (!FIREBASE_IS_CONFIGURED) {
+        alert('尚未設定 Firebase，請先參考說明文件填入 firebaseConfig。');
+        return;
+      }
+      const code = document.getElementById('syncCodeInput').value.trim();
+      if (!code) {
+        alert('請輸入同步代碼');
+        return;
+      }
+
+      try {
+        if (!cloudAuth.currentUser) {
+          await cloudAuth.signInAnonymously();
+        }
+        const docId = await sha256Hex(code);
+        const snap = await cloudDb.collection('syncedPlanners').doc(docId).get();
+
+        if (snap.exists) {
+          const useCloud = confirm('偵測到這組代碼雲端已經有資料。\n按「確定」用雲端資料覆蓋這台裝置；按「取消」則用這台裝置的資料覆蓋雲端。');
+          connectSyncCode(code, useCloud ? 'useCloud' : 'useLocal');
+        } else {
+          connectSyncCode(code, 'auto');
+        }
+      } catch (err) {
+        console.error(err);
+        updateSyncStatus('error');
+        alert('連接雲端失敗，請確認網路連線與 Firebase 設定是否正確。');
+      }
+    }
+
+    function initCloudSync() {
+      if (!FIREBASE_IS_CONFIGURED) {
+        updateSyncStatus('disabled');
+        return;
+      }
+      try {
+        firebase.initializeApp(firebaseConfig);
+        cloudAuth = firebase.auth();
+        cloudDb = firebase.firestore();
+      } catch (err) {
+        console.error('Firebase 初始化失敗', err);
+        return;
+      }
+
+      const savedCode = localStorage.getItem(SYNC_CODE_KEY);
+      const savedHash = localStorage.getItem(SYNC_HASH_KEY);
+      if (savedCode && savedHash) {
+        cloudAuth.signInAnonymously()
+          .then(() => {
+            cloudSyncEnabled = true;
+            listenToCloud(savedHash);
+            updateSyncStatus('synced');
+          })
+          .catch(err => {
+            console.error('自動連接雲端失敗', err);
+            updateSyncStatus('error');
+          });
+      } else {
+        updateSyncStatus('disabled');
+      }
     }
 
     /* ---------------- 課程資料存取（名稱 / 教室 / 顏色） ---------------- */
@@ -1561,6 +1922,7 @@
     updateWeekDisplay();
     renderWeeklyPlanner();
     renderReminderPanel();
+    initCloudSync();
   </script>
 </body>
 </html>
